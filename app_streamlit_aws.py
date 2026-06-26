@@ -15,7 +15,6 @@ import pandas as pd
 import streamlit as st
 from botocore.exceptions import ClientError, NoCredentialsError
 
-
 ENDPOINT_NAME = os.environ.get("ENDPOINT_NAME", "credit-score-endpoint")
 REGION        = os.environ.get("AWS_REGION",    "us-east-1")
 
@@ -30,7 +29,6 @@ st.set_page_config(
 def get_runtime_client():
     return boto3.client("sagemaker-runtime", region_name=REGION)
 
-
 def invoke_endpoint(input_dict: dict) -> dict:
     runtime = get_runtime_client()
     payload = {"instances": [input_dict]}
@@ -41,7 +39,6 @@ def invoke_endpoint(input_dict: dict) -> dict:
         Body=json.dumps(payload),
     )
     return json.loads(response["Body"].read().decode("utf-8"))
-
 
 # Header
 st.title("💳 Credit Score Predictor")
@@ -146,14 +143,6 @@ if submitted:
         else:
             st.error(f"### ⚠️ Credit Score: **{result_label}**")
             st.caption("Risiko tinggi: Perbaikan finansial disarankan")
-
-        # Confidence bars — sama persis versi lokal
-        if "probabilities" in result:
-            proba = result["probabilities"][0]
-            st.write("**Tingkat Keyakinan Prediksi**")
-            for label, prob in zip(["Poor", "Standard", "Good"], proba):
-                st.write(f"{label}")
-                st.progress(float(prob), text=f"{prob:.1%}")
 
         # Ringkasan input — identik versi lokal
         with st.expander("📋 Ringkasan Input", expanded=False):
