@@ -1,12 +1,3 @@
-"""
-Streamlit UI untuk Credit Score Classifier yang di-host di SageMaker.
-
-Reads endpoint name dan region dari environment variables.
-boto3 picks up AWS credentials dari:
-  - EC2 instance profile (ketika running on EC2 dengan LabInstanceProfile), OR
-  - ~/.aws/credentials (ketika running locally)
-"""
-
 import json
 import os
 
@@ -42,10 +33,34 @@ def invoke_endpoint(input_dict: dict) -> dict:
 
 # Header
 st.title("💳 Credit Score Predictor")
-st.caption(f"Credit Classification: **Poor**, **Standard**, atau **Good** via SageMaker endpoint `{ENDPOINT_NAME}`")
+st.caption(f"Credit Classification: **Poor**, **Standard**, or **Good** (Amazon SageMaker Endpoint: `{ENDPOINT_NAME}`)")
 st.divider()
 
-# Form — identik dengan versi lokal
+month_options = {
+    "January": "Januari", "February": "Februari", "March": "Maret", "April": "April",
+    "May": "Mei", "June": "Juni", "July": "Juli", "August": "Agustus",
+    "September": "September", "October": "Oktober", "November": "November", "December": "Desember"
+}
+
+occupation_options = {
+    "Accountant": "Akuntan", "Architect": "Arsitek", "Developer": "Developer", "Doctor": "Dokter",
+    "Engineer": "Insinyur", "Entrepreneur": "Pengusaha", "Journalist": "Jurnalis", "Lawyer": "Pengacara",
+    "Manager": "Manajer", "Mechanic": "Mekanik", "Media_Manager": "Manajer Media", "Musician": "Musisi",
+    "Scientist": "Ilmuwan", "Teacher": "Guru", "Writer": "Penulis"
+}
+
+loan_options = {
+    "Personal Loan": "Pinjaman Pribadi", "Student Loan": "Pinjaman Mahasiswa", "Mortgage Loan": "KPR",
+    "Payday Loan": "Pinjaman Gaji", "Auto Loan": "Pinjaman Mobil", "Credit-Builder Loan": "Pinjaman Pembangun Kredit",
+    "Debt Consolidation Loan": "Konsolidasi Utang", "Home Equity Loan": "Pinjaman Ekuitas Rumah", "Not Specified": "Tidak Ditentukan"
+}
+
+min_amount_options = {
+    "No": "Tidak",
+    "Yes": "Ya"
+}
+
+# Form 
 with st.form("credit_form"):
 
     st.subheader("👤 Profil Pribadi")
@@ -53,12 +68,10 @@ with st.form("credit_form"):
     with c1:
         age = st.number_input("Usia (tahun)", min_value=18, max_value=100, value=30)
     with c2:
-        month = st.selectbox("Bulan", ["Januari","Februari","Maret","April","Mei","Juni",
-                                       "Juli","Agustus","September","Oktober","November","Desember"])
+        # Menampilkan Bahasa Indonesia tetapi menyimpan nilai Bahasa Inggris ke variabel 'month'
+        month = st.selectbox("Bulan", options=list(month_options.keys()), format_func=lambda x: month_options[x])
     with c3:
-        occupation = st.selectbox("Pekerjaan", ["Akuntan","Arsitek","Developer","Dokter","Insinyur",
-                                                "Pengusaha","Jurnalis","Pengacara","Manajer","Mekanik",
-                                                "Manajer Media","Musisi","Ilmuwan","Guru","Penulis"])
+        occupation = st.selectbox("Pekerjaan", options=list(occupation_options.keys()), format_func=lambda x: occupation_options[x])
 
     st.subheader("💰 Pendapatan & Rekening")
     c1, c2 = st.columns(2)
@@ -83,10 +96,8 @@ with st.form("credit_form"):
     with c2:
         changed_credit_limit = st.number_input("Perubahan Limit Kartu Kredit (%)", min_value=0.0, value=10.0, step=0.1)
         num_credit_inquiries = st.number_input("Jumlah Permintaan Kredit", min_value=0, value=5)
-        type_of_loan         = st.selectbox("Jenis Pinjaman", ["Pinjaman Pribadi","Pinjaman Mahasiswa","KPR",
-                                                               "Pinjaman Gaji","Pinjaman Mobil","Pinjaman Pembangun Kredit",
-                                                               "Konsolidasi Utang","Pinjaman Ekuitas Rumah","Tidak Ditentukan"])
-        credit_mix           = st.selectbox("Komposisi Kredit", ["Bad","Standard","Good"])
+        type_of_loan         = st.selectbox("Jenis Pinjaman", options=list(loan_options.keys()), format_func=lambda x: loan_options[x])
+        credit_mix           = st.selectbox("Komposisi Kredit", ["Bad", "Standard", "Good"])
 
     st.subheader("📅 Perilaku Pembayaran")
     c1, c2, c3 = st.columns(3)
@@ -95,7 +106,7 @@ with st.form("credit_form"):
     with c2:
         num_of_delayed_payment = st.number_input("Jumlah Pembayaran Terlambat", min_value=0, value=5)
     with c3:
-        payment_of_min_amount = st.selectbox("Hanya Bayar Minimum?", ["No","Yes"])
+        payment_of_min_amount = st.selectbox("Hanya Bayar Minimum?", options=list(min_amount_options.keys()), format_func=lambda x: min_amount_options[x])
 
     payment_behaviour = st.selectbox("Pola Belanja & Pembayaran", [
         "Low_spent_Small_value_payments",
@@ -109,7 +120,7 @@ with st.form("credit_form"):
     st.divider()
     submitted = st.form_submit_button("🔍 Prediksi", type="primary", use_container_width=True)
 
-# Hasil prediksi — struktur identik versi lokal, bedanya pakai invoke_endpoint bukan joblib
+# Proses Prediksi
 if submitted:
     input_dict = {
         "Age": age, "Annual_Income": annual_income,
@@ -128,7 +139,15 @@ if submitted:
 
     try:
         result = invoke_endpoint(input_dict)
-        pred   = result["predictions"][0]
+        
+        # Ekstraksi hasil prediksi dari response AWS SageMaker
+        if isinstance(result, dict) and "predictions" in result:
+            pred = result["predictions"][0]
+        elif isinstance(result, list):
+            pred = result[0]
+        else:
+            pred = result
+            
         labels = {0: "Poor", 1: "Standard", 2: "Good"}
         result_label = labels[int(pred)]
 
@@ -144,11 +163,11 @@ if submitted:
             st.error(f"### ⚠️ Credit Score: **{result_label}**")
             st.caption("Risiko tinggi: Perbaikan finansial disarankan")
 
-        # Ringkasan input — identik versi lokal
+        # Ringkasan input tetap rapi menggunakan tabel
         with st.expander("📋 Ringkasan Input", expanded=False):
             st.dataframe(pd.DataFrame({
-                "Fitur": ["Pendapatan Tahunan","Saldo Bulanan","Sisa Utang",
-                          "Rasio Penggunaan Kredit","Pembayaran Terlambat","Usia Riwayat Kredit"],
+                "Fitur": ["Pendapatan Tahunan", "Saldo Bulanan", "Sisa Utang",
+                          "Rasio Penggunaan Kredit", "Pembayaran Terlambat", "Usia Riwayat Kredit"],
                 "Nilai": [f"${annual_income:,.0f}", f"${monthly_balance:,.0f}", f"${outstanding_debt:,.0f}",
                           f"{credit_utilization_ratio:.1f}%", str(num_of_delayed_payment), f"{credit_history_age_months} bulan"]
             }), use_container_width=True, hide_index=True)
